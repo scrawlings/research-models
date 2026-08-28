@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inequity Aversion &amp; the Evolution of Cooperation</title>
+<style>
+  :root{
+    --bg: #0b1016;
+    --panel: #121a24;
+    --panel-2: #0f1720;
+    --border: rgba(255,255,255,0.08);
+    --text: #dfe7ee;
+    --muted: #8b98a8;
+    --coop: #4fd1c5;
+    --defect: #f56565;
+    --accent: #f6ad55;
+    --accent2: #7dd3fc;
+  }
+  * { box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  .app{ max-width:1280px; margin:0 auto; padding:20px 20px 60px; }
+  header h1{
+    font-size: 1.5rem; margin:0 0 4px; font-weight:600; letter-spacing:-0.01em;
+  }
+  header p.subtitle{ margin:0 0 18px; color:var(--muted); font-size:0.92rem; max-width:70ch; line-height:1.5; }
+  .layout{ display:grid; grid-template-columns: 300px 1fr; gap:16px; align-items:start; }
+  @media (max-width: 880px){ .layout{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:16px;
+  }
+  .controls .panel + .panel{ margin-top:14px; }
+
+  .mode-tabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .mode-tabs button{
+    flex:1; padding:8px 6px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--muted); font-size:0.78rem; cursor:pointer;
+    font-weight:600;
+  }
+  .mode-tabs button.active{ background: rgba(79,209,197,0.14); color:var(--coop); border-color: rgba(79,209,197,0.4); }
+
+  .field{ margin-bottom:14px; }
+  .field label{ display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:6px; }
+  .field label span.val{ color:var(--text); font-variant-numeric: tabular-nums; }
+  .field input[type=range]{ width:100%; accent-color: var(--coop); }
+  .hint{ font-size:0.68rem; color:var(--muted); margin-top:3px; line-height:1.4; }
+
+  .btnrow{ display:flex; gap:8px; margin-top:4px; }
+  .btnrow button{
+    flex:1; padding:9px 8px; border-radius:8px; border:1px solid var(--border);
+    background:#1a2530; color:var(--text); font-size:0.8rem; cursor:pointer; font-weight:600;
+  }
+  .btnrow button:hover{ background:#20303e; }
+  #btnPlay.playing{ background: rgba(245,101,101,0.15); border-color: rgba(245,101,101,0.4); color: var(--defect); }
+  #btnPlay:not(.playing){ background: rgba(79,209,197,0.15); border-color: rgba(79,209,197,0.4); color: var(--coop); }
+
+  .stats{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .stat{ background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; }
+  .stat .k{ font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; }
+  .stat .v{ font-size:1.05rem; font-weight:700; font-variant-numeric: tabular-nums; }
+  .stat.wide{ grid-column: 1 / -1; }
+  .interactions{ font-size:0.75rem; color:var(--muted); line-height:1.6; }
+  .interactions b{ color:var(--text); }
+  .swatch{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; }
+
+  .viz .panel{ margin-bottom:14px; }
+  .chart-title{ display:flex; justify-content:space-between; font-size:0.78rem; color:var(--muted); margin-bottom:8px; }
+  .chart-title b{ color:var(--text); font-weight:600; }
+  canvas{ display:block; width:100%; border-radius:6px; }
+  #fcCanvas, #lambdaCanvas{ height:130px; }
+  #popCanvas{ height:360px; }
+
+  .legend{ display:flex; gap:16px; font-size:0.75rem; color:var(--muted); margin-top:8px; }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+
+  .explainer{ margin-top:22px; }
+  .explainer h2{ font-size:1rem; margin: 22px 0 8px; }
+  .explainer h2:first-child{ margin-top:0; }
+  .explainer p{ color:#c3ccd6; font-size:0.86rem; line-height:1.65; max-width:90ch; }
+  .eq{
+    font-family: "SF Mono", Menlo, Consolas, monospace; background:var(--panel-2);
+    border:1px solid var(--border); border-radius:8px; padding:10px 14px; margin:8px 0;
+    font-size:0.85rem; color:var(--accent2); display:inline-block;
+  }
+  .eq small{ color:var(--muted); display:block; font-family: -apple-system, sans-serif; font-size:0.72rem; margin-top:4px; }
+  footer{ margin-top:30px; font-size:0.72rem; color:var(--muted); border-top:1px solid var(--border); padding-top:14px; }
+  footer a{ color:var(--accent2); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>Inequity Aversion &amp; the Evolution of Cooperation</h1>
+    <p class="subtitle">
+      An interactive model after Ahmed &amp; Karlapalem (2014), <em>"Inequity Aversion and the Evolution of Cooperation"</em>
+      (arXiv:1402.4946). Agents never see a partner's type or history &mdash; only their own accumulated payoff.
+      That single number acts as a proxy signal: agents avoid partners whose accumulated payoff differs too much
+      from their own, which lets cooperators cluster together and out-compete defectors, purely through partner
+      selection.
+    </p>
+  </header>
+
+  <div class="layout">
+
+    <!-- ==================== CONTROLS ==================== -->
+    <aside class="controls">
+
+      <div class="panel">
+        <div class="mode-tabs">
+          <button id="tabWellmixed" class="active">Well-mixed</button>
+          <button id="tabLattice">2D Lattice</button>
+        </div>
+
+        <div id="wellmixedFields">
+          <div class="field">
+            <label>Population size N <span class="val" id="nVal">250</span></label>
+            <input type="range" id="nSlider" min="50" max="400" step="10" value="250">
+          </div>
+          <div class="field">
+            <label>Search space N<sub>s</sub> <span class="val" id="nsVal">8</span></label>
+            <input type="range" id="nsSlider" min="2" max="24" step="1" value="8">
+            <div class="hint">Number of randomly-sampled candidate partners each agent considers before picking the closest-payoff one.</div>
+          </div>
+        </div>
+
+        <div id="latticeFields" style="display:none;">
+          <div class="field">
+            <label>Grid size <span class="val" id="gridVal">12 × 12</span></label>
+            <input type="range" id="gridSlider" min="8" max="30" step="1" value="12">
+            <div class="hint">Agents sit on a toroidal grid and can only interact / reproduce with their 4 nearest neighbours.</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Cost-to-benefit c/b <span class="val" id="cbVal">0.45</span></label>
+          <input type="range" id="cbSlider" min="0.05" max="0.9" step="0.01" value="0.45">
+          <div class="hint">Cooperating costs c, gives benefit b to the partner. Paper finds cooperation collapses around c/b ≥ 0.5.</div>
+        </div>
+
+        <div class="field">
+          <label>Mutation rate μ <span class="val" id="muVal">0.10</span></label>
+          <input type="range" id="muSlider" min="0" max="0.5" step="0.01" value="0.10">
+          <div class="hint">Probability an offspring's type is randomly reset, and independently that Gaussian noise (σ=1) is added to its λ.</div>
+        </div>
+
+        <div class="field">
+          <label>Max sensitivity λ<sub>max</sub> <span class="val" id="lambdaMaxVal">5</span></label>
+          <input type="range" id="lambdaMaxSlider" min="1" max="10" step="0.5" value="5">
+          <div class="hint">λ=0: indifferent to inequity, accepts anyone. Large λ: rejects any partner whose payoff differs at all.</div>
+        </div>
+
+        <div class="field">
+          <label>Initial cooperator fraction <span class="val" id="coopFracVal">10%</span></label>
+          <input type="range" id="coopFracSlider" min="0" max="1" step="0.05" value="0.1">
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="field" style="margin-bottom:10px;">
+          <label>Speed (generations / s) <span class="val" id="speedVal">30</span></label>
+          <input type="range" id="speedSlider" min="1" max="300" step="1" value="30">
+        </div>
+        <div class="btnrow">
+          <button id="btnPlay">▶ Play</button>
+          <button id="btnStep">Step</button>
+          <button id="btnReset">Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="stats">
+          <div class="stat"><div class="k">Generation</div><div class="v" id="statGen">0</div></div>
+          <div class="stat"><div class="k">Cooperators f<sub>c</sub></div><div class="v" id="statFc">0%</div></div>
+          <div class="stat"><div class="k">Avg λ (cooperators)</div><div class="v" id="statLambdaC">0.00</div></div>
+          <div class="stat"><div class="k">Avg λ (all)</div><div class="v" id="statLambdaAll">0.00</div></div>
+          <div class="stat wide">
+            <div class="k">This generation's interactions</div>
+            <div class="interactions" id="statInteractions">–</div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ==================== VISUALIZATION ==================== -->
+    <main class="viz">
+
+      <div class="panel">
+        <div class="chart-title"><b>Fraction cooperative, f<sub>c</sub></b><span>range 0 – 1</span></div>
+        <canvas id="fcCanvas"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="chart-title"><b>Average λ of cooperative players</b><span id="lambdaRangeLabel">range 0 – 5</span></div>
+        <canvas id="lambdaCanvas"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="chart-title"><b id="popTitle">Population, sorted by accumulated payoff</b><span id="popSubtitle">this generation</span></div>
+        <canvas id="popCanvas"></canvas>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--coop)"></span> Cooperator</span>
+          <span><span class="dot" style="background:var(--defect)"></span> Defector</span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div class="explainer">
+    <h2>The model</h2>
+    <p>
+      Each agent is a fixed <strong>type</strong> (always-cooperate or always-defect) and carries a
+      <strong>sensitivity parameter λ ∈ [0, λ<sub>max</sub>]</strong> describing how averse it is to payoff inequality.
+      At the start of every generation everyone's accumulated payoff r resets to 0. Agents are then visited in
+      random order; each samples a set of candidate partners (a random subset in the well-mixed model, or its
+      4 grid neighbours in the lattice model) and prefers whichever candidate has the closest accumulated payoff
+      to its own &mdash; weighted by how inequity-averse it is:
+    </p>
+    <div class="eq">φ(i, j) = exp( −λᵢ · |rᵢ − rⱼ| )<small>probability agent i would accept j as a partner</small></div>
+    <div class="eq">P(i, j) = φ(i, j) · φ(j, i) = exp( −(λᵢ + λⱼ) · |rᵢ − rⱼ| )<small>probability the interaction actually happens (mutual consent)</small></div>
+    <p>
+      If the interaction happens, the pair plays one round of the Prisoner's Dilemma with the normalized payoff
+      C-C → (1, 1), C-D → (0, 1+c/b), D-D → (c/b, c/b) &mdash; a defector always earns more than a cooperator in any single
+      encounter. At the end of the generation, agents reproduce via binary tournament: two random agents (globally
+      in the well-mixed model, from the local neighbourhood in the lattice model) are compared by <em>accumulated
+      payoff</em>, and the winner's type and λ are copied into the next generation, subject to mutation.
+    </p>
+
+    <h2>Why cooperation emerges without memory or reputation</h2>
+    <p>
+      Nobody ever recognises anybody. Early in a generation every payoff is 0, so everyone looks alike and
+      cooperators are briefly vulnerable to exploitation. But the moment a defector free-rides on a cooperator,
+      their payoffs diverge. If the cooperator is sufficiently inequity-averse (λ large enough), it stops accepting
+      that defector &mdash; and any other agent whose payoff has drifted away from its own &mdash; and starts clustering
+      with agents whose payoff still matches its own, which in practice means other cooperators. Those clusters earn
+      the mutual-cooperation payoff of 1 each round instead of being drained by defectors, out-reproduce everyone
+      else, and λ itself rises under selection. Eventually tolerant cooperators (small λ) become slightly favoured
+      again since defectors are now rare, λ drifts back down, and the population becomes vulnerable to a fresh wave
+      of defection &mdash; producing the cyclical dynamics visible in the f<sub>c</sub> chart above. Try lowering the search
+      space N<sub>s</sub> or raising c/b to see cooperation struggle to recover; switch to the 2D lattice to see spatial
+      clustering make cooperation far more stable.
+    </p>
+  </div>
+
+  <footer>
+    Model: Ahmed, A. &amp; Karlapalem, K. (2014). <em>Inequity Aversion and the Evolution of Cooperation.</em>
+    arXiv:1402.4946. This page is a from-scratch, in-browser re-implementation for exploration &mdash; not the
+    original authors' code, and numbers will not exactly reproduce their figures.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------
+  const state = {
+    mode: 'wellmixed',
+    N: 250,
+    Ns: 8,
+    gridSize: 12,
+    cb: 0.45,
+    mu: 0.10,
+    lambdaMax: 5,
+    coopFrac: 0.10,
+    speed: 30,
+    running: false,
+    generation: 0,
+    agents: [],
+    history: { fc: [], lambdaC: [] },
+    maxHistory: 3000,
+    lastInteractions: { CC:0, CD:0, DD:0, skipped:0 }
+  };
+
+  // ---------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------
+  function randInt(n){ return Math.floor(Math.random()*n); }
+  function clamp(v,lo,hi){ return Math.min(hi, Math.max(lo, v)); }
+
+  function gaussianRandom(mean, sd){
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    return mean + z * sd;
+  }
+
+  function shuffledIndices(n){
+    const arr = new Array(n);
+    for (let i = 0; i < n; i++) arr[i] = i;
+    for (let i = n - 1; i > 0; i--) {
+      const j = randInt(i + 1);
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  function sampleDistinct(n, k, exclude){
+    const result = [];
+    if (k <= 0 || n <= 1) return result;
+    const seen = new Set([exclude]);
+    let attempts = 0;
+    const maxAttempts = k * 20 + 50;
+    while (result.length < k && attempts < maxAttempts) {
+      const r = randInt(n);
+      attempts++;
+      if (!seen.has(r)) { seen.add(r); result.push(r); }
+    }
+    return result;
+  }
+
+  function neighbors4(idx, w, h){
+    const x = idx % w, y = Math.floor(idx / w);
+    return [
+      ((y - 1 + h) % h) * w + x,
+      ((y + 1) % h) * w + x,
+      y * w + ((x - 1 + w) % w),
+      y * w + ((x + 1) % w)
+    ];
+  }
+
+  // ---------------------------------------------------------------
+  // Simulation core
+  // ---------------------------------------------------------------
+  function initAgents(){
+    const n = (state.mode === 'wellmixed') ? state.N : state.gridSize * state.gridSize;
+    const agents = new Array(n);
+    for (let i = 0; i < n; i++) {
+      agents[i] = {
+        type: Math.random() < state.coopFrac ? 1 : 0,
+        lambda: Math.random() * state.lambdaMax,
+        r: 0
+      };
+    }
+    state.agents = agents;
+  }
+
+  function playGame(a, b, cb){
+    if (a.type && b.type) { a.r += 1; b.r += 1; }
+    else if (a.type && !b.type) { a.r += 0; b.r += 1 + cb; }
+    else if (!a.type && b.type) { a.r += 1 + cb; b.r += 0; }
+    else { a.r += cb; b.r += cb; }
+  }
+
+  function candidatesFor(i){
+    if (state.mode === 'wellmixed') {
+      const ns = Math.min(state.Ns, state.agents.length - 1);
+      return sampleDistinct(state.agents.length, ns, i);
+    }
+    return neighbors4(i, state.gridSize, state.gridSize);
+  }
+
+  function recordHistory(){
+    const agents = state.agents;
+    let coopCount = 0, coopLambdaSum = 0, allLambdaSum = 0;
+    for (const a of agents) {
+      allLambdaSum += a.lambda;
+      if (a.type === 1) { coopCount++; coopLambdaSum += a.lambda; }
+    }
+    const fc = coopCount / agents.length;
+    const avgLambdaC = coopCount ? coopLambdaSum / coopCount : 0;
+    const avgLambdaAll = allLambdaSum / agents.length;
+    state.history.fc.push(fc);
+    state.history.lambdaC.push(avgLambdaC);
+    state.lastAvgLambdaAll = avgLambdaAll;
+    if (state.history.fc.length > state.maxHistory) {
+      state.history.fc.shift();
+      state.history.lambdaC.shift();
+    }
+  }
+
+  function evolutionaryStepWellMixed(){
+    const agents = state.agents;
+    const N = agents.length;
+    const newAgents = new Array(N);
+    for (let k = 0; k < N; k++) {
+      const i = randInt(N);
+      let j = randInt(N);
+      while (j === i) j = randInt(N);
+      const winner = agents[i].r >= agents[j].r ? agents[i] : agents[j];
+      newAgents[k] = mutateOffspring(winner);
+    }
+    state.agents = newAgents;
+  }
+
+  function evolutionaryStepLattice(){
+    const g = state.gridSize;
+    const agents = state.agents;
+    const n = g * g;
+    const newAgents = new Array(n);
+    for (let idx = 0; idx < n; idx++) {
+      const neigh = neighbors4(idx, g, g);
+      let a = neigh[randInt(neigh.length)];
+      let b = neigh[randInt(neigh.length)];
+      let guard = 0;
+      while (b === a && guard++ < 10) b = neigh[randInt(neigh.length)];
+      const winner = agents[a].r >= agents[b].r ? agents[a] : agents[b];
+      newAgents[idx] = mutateOffspring(winner);
+    }
+    state.agents = newAgents;
+  }
+
+  function mutateOffspring(winner){
+    let type = winner.type;
+    let lambda = winner.lambda;
+    if (Math.random() < state.mu) type = Math.random() < 0.5 ? 0 : 1;
+    if (Math.random() < state.mu) lambda = clamp(lambda + gaussianRandom(0, 1), 0, state.lambdaMax);
+    return { type, lambda, r: 0 };
+  }
+
+  function runGeneration(){
+    const agents = state.agents;
+    const n = agents.length;
+    for (const a of agents) a.r = 0;
+
+    const order = shuffledIndices(n);
+    let CC = 0, CD = 0, DD = 0, skipped = 0;
+
+    for (const i of order) {
+      const ai = agents[i];
+      const candidates = candidatesFor(i);
+      let bestJ = -1, bestPhi = -Infinity;
+      for (const j of candidates) {
+        if (j === i) continue;
+        const aj = agents[j];
+        const phi = Math.exp(-ai.lambda * Math.abs(ai.r - aj.r));
+        if (phi > bestPhi) { bestPhi = phi; bestJ = j; }
+      }
+      if (bestJ === -1) { skipped++; continue; }
+      const aj = agents[bestJ];
+      const P = Math.exp(-(ai.lambda + aj.lambda) * Math.abs(ai.r - aj.r));
+      if (Math.random() < P) {
+        playGame(ai, aj, state.cb);
+        if (ai.type && aj.type) CC++;
+        else if (!ai.type && !aj.type) DD++;
+        else CD++;
+      } else {
+        skipped++;
+      }
+    }
+
+    state.lastInteractions = { CC, CD, DD, skipped };
+    recordHistory();
+
+    if (state.mode === 'wellmixed') evolutionaryStepWellMixed();
+    else evolutionaryStepLattice();
+
+    state.generation++;
+  }
+
+  function resetSimulation(){
+    state.generation = 0;
+    state.history.fc = [];
+    state.history.lambdaC = [];
+    state.lastInteractions = { CC:0, CD:0, DD:0, skipped:0 };
+    initAgents();
+    render();
+  }
+
+  // ---------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------
+  function fitCanvas(canvas){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  function drawLineChart(canvas, series, yMin, yMax){
+    const { ctx, w, h } = fitCanvas(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0f1720';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    const gridLines = 4;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = Math.round(h - (i / gridLines) * h) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    const n = series.reduce((m, s) => Math.max(m, s.data.length), 0);
+    if (n < 2) return;
+
+    series.forEach(s => {
+      if (s.data.length < 2) return;
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const len = s.data.length;
+      for (let idx = 0; idx < len; idx++) {
+        const x = (idx / (n - 1)) * w;
+        const v = (s.data[idx] - yMin) / (yMax - yMin);
+        const y = h - clamp(v, 0, 1) * h;
+        if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+  }
+
+  function renderPopulationWellmixed(canvas){
+    const { ctx, w, h } = fitCanvas(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0f1720';
+    ctx.fillRect(0, 0, w, h);
+
+    const sorted = state.agents.slice().sort((a, b) => a.r - b.r);
+    const n = sorted.length;
+    if (!n) return;
+    let maxR = 0.0001;
+    for (const a of sorted) if (a.r > maxR) maxR = a.r;
+
+    const pad = 10;
+    const radius = Math.max(1.5, Math.min(5, (w - 2 * pad) / n * 0.5));
+    for (let idx = 0; idx < n; idx++) {
+      const a = sorted[idx];
+      const x = n > 1 ? pad + (idx / (n - 1)) * (w - 2 * pad) : w / 2;
+      const y = h - pad - (a.r / maxR) * (h - 2 * pad);
+      ctx.beginPath();
+      ctx.fillStyle = a.type ? 'rgba(79,209,197,0.85)' : 'rgba(245,101,101,0.85)';
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function renderPopulationLattice(canvas){
+    const { ctx, w, h } = fitCanvas(canvas);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0f1720';
+    ctx.fillRect(0, 0, w, h);
+
+    const g = state.gridSize;
+    const cell = Math.min(w, h) / g;
+    const offsetX = (w - cell * g) / 2;
+    const offsetY = (h - cell * g) / 2;
+    for (let y = 0; y < g; y++) {
+      for (let x = 0; x < g; x++) {
+        const a = state.agents[y * g + x];
+        ctx.fillStyle = a.type ? '#4fd1c5' : '#f56565';
+        ctx.fillRect(offsetX + x * cell + 1, offsetY + y * cell + 1, Math.max(1, cell - 2), Math.max(1, cell - 2));
+      }
+    }
+  }
+
+  function render(){
+    const fc = state.history.fc, lc = state.history.lambdaC;
+    const fcLast = fc.length ? fc[fc.length - 1] : 0;
+    const lcLast = lc.length ? lc[lc.length - 1] : 0;
+
+    statGen.textContent = state.generation;
+    statFc.textContent = (fcLast * 100).toFixed(1) + '%';
+    statLambdaC.textContent = lcLast.toFixed(2);
+    statLambdaAll.textContent = (state.lastAvgLambdaAll || 0).toFixed(2);
+
+    const { CC, CD, DD, skipped } = state.lastInteractions;
+    statInteractions.innerHTML =
+      '<span class="swatch" style="background:var(--coop)"></span><b>C-C</b> ' + CC + '&nbsp;&nbsp;' +
+      '<span class="swatch" style="background:var(--accent)"></span><b>C-D</b> ' + CD + '&nbsp;&nbsp;' +
+      '<span class="swatch" style="background:var(--defect)"></span><b>D-D</b> ' + DD + '&nbsp;&nbsp;' +
+      '<span style="color:var(--muted)">skipped ' + skipped + '</span>';
+
+    drawLineChart(fcCanvas, [{ data: fc, color: '#4fd1c5' }], 0, 1);
+    drawLineChart(lambdaCanvas, [{ data: lc, color: '#f6ad55' }], 0, state.lambdaMax);
+
+    if (state.mode === 'wellmixed') {
+      popTitle.textContent = 'Population, sorted by accumulated payoff';
+      popSubtitle.textContent = 'this generation';
+      renderPopulationWellmixed(popCanvas);
+    } else {
+      popTitle.textContent = 'Spatial grid';
+      popSubtitle.textContent = state.gridSize + ' × ' + state.gridSize + ' toroidal lattice';
+      renderPopulationLattice(popCanvas);
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // DOM wiring
+  // ---------------------------------------------------------------
+  const $ = id => document.getElementById(id);
+
+  const tabWellmixed = $('tabWellmixed'), tabLattice = $('tabLattice');
+  const wellmixedFields = $('wellmixedFields'), latticeFields = $('latticeFields');
+  const nSlider = $('nSlider'), nVal = $('nVal');
+  const nsSlider = $('nsSlider'), nsVal = $('nsVal');
+  const gridSlider = $('gridSlider'), gridVal = $('gridVal');
+  const cbSlider = $('cbSlider'), cbVal = $('cbVal');
+  const muSlider = $('muSlider'), muVal = $('muVal');
+  const lambdaMaxSlider = $('lambdaMaxSlider'), lambdaMaxVal = $('lambdaMaxVal');
+  const coopFracSlider = $('coopFracSlider'), coopFracVal = $('coopFracVal');
+  const speedSlider = $('speedSlider'), speedVal = $('speedVal');
+  const btnPlay = $('btnPlay'), btnStep = $('btnStep'), btnReset = $('btnReset');
+
+  const statGen = $('statGen'), statFc = $('statFc'), statLambdaC = $('statLambdaC'),
+        statLambdaAll = $('statLambdaAll'), statInteractions = $('statInteractions');
+  const fcCanvas = $('fcCanvas'), lambdaCanvas = $('lambdaCanvas'), popCanvas = $('popCanvas');
+  const popTitle = $('popTitle'), popSubtitle = $('popSubtitle');
+  const lambdaRangeLabel = $('lambdaRangeLabel');
+
+  function setMode(mode){
+    state.mode = mode;
+    tabWellmixed.classList.toggle('active', mode === 'wellmixed');
+    tabLattice.classList.toggle('active', mode === 'lattice');
+    wellmixedFields.style.display = mode === 'wellmixed' ? '' : 'none';
+    latticeFields.style.display = mode === 'lattice' ? '' : 'none';
+    resetSimulation();
+  }
+
+  tabWellmixed.addEventListener('click', () => setMode('wellmixed'));
+  tabLattice.addEventListener('click', () => setMode('lattice'));
+
+  nSlider.addEventListener('input', () => {
+    state.N = parseInt(nSlider.value, 10);
+    nVal.textContent = state.N;
+    resetSimulation();
+  });
+  nsSlider.addEventListener('input', () => {
+    state.Ns = parseInt(nsSlider.value, 10);
+    nsVal.textContent = state.Ns;
+    resetSimulation();
+  });
+  gridSlider.addEventListener('input', () => {
+    state.gridSize = parseInt(gridSlider.value, 10);
+    gridVal.textContent = state.gridSize + ' × ' + state.gridSize;
+    resetSimulation();
+  });
+  cbSlider.addEventListener('input', () => {
+    state.cb = parseFloat(cbSlider.value);
+    cbVal.textContent = state.cb.toFixed(2);
+    resetSimulation();
+  });
+  muSlider.addEventListener('input', () => {
+    state.mu = parseFloat(muSlider.value);
+    muVal.textContent = state.mu.toFixed(2);
+    resetSimulation();
+  });
+  lambdaMaxSlider.addEventListener('input', () => {
+    state.lambdaMax = parseFloat(lambdaMaxSlider.value);
+    lambdaMaxVal.textContent = state.lambdaMax;
+    lambdaRangeLabel.textContent = 'range 0 – ' + state.lambdaMax;
+    resetSimulation();
+  });
+  coopFracSlider.addEventListener('input', () => {
+    state.coopFrac = parseFloat(coopFracSlider.value);
+    coopFracVal.textContent = Math.round(state.coopFrac * 100) + '%';
+    resetSimulation();
+  });
+  speedSlider.addEventListener('input', () => {
+    state.speed = parseInt(speedSlider.value, 10);
+    speedVal.textContent = state.speed;
+  });
+
+  btnPlay.addEventListener('click', () => {
+    state.running = !state.running;
+    btnPlay.textContent = state.running ? '⏸ Pause' : '▶ Play';
+    btnPlay.classList.toggle('playing', state.running);
+  });
+  btnStep.addEventListener('click', () => {
+    runGeneration();
+    render();
+  });
+  btnReset.addEventListener('click', resetSimulation);
+
+  window.addEventListener('resize', render);
+
+  // ---------------------------------------------------------------
+  // Main loop
+  // ---------------------------------------------------------------
+  let acc = 0;
+  let lastTime = performance.now();
+  function loop(now){
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    if (state.running) {
+      acc += dt * state.speed;
+      const stepsToRun = Math.min(Math.floor(acc), 2000);
+      acc -= stepsToRun;
+      for (let s = 0; s < stepsToRun; s++) runGeneration();
+    }
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resetSimulation();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
