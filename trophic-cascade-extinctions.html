@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trophic Co-extinction Cascade Model — Amaral &amp; Meyer (1998)</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --border: #2a313c;
+    --text: #d7dde5;
+    --muted: #8a95a3;
+    --accent: #4fa3ff;
+    --accent2: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
+  header p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; max-width: 900px; }
+  header a { color: var(--accent); }
+  main {
+    display: flex;
+    gap: 16px;
+    padding: 16px 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  #controls {
+    width: 280px;
+    flex-shrink: 0;
+  }
+  #controls h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 8px; }
+  #controls h2:first-child { margin-top: 0; }
+  .row { margin-bottom: 10px; }
+  .row label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    margin-bottom: 3px;
+  }
+  .row label span.val { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .row input[type=range] { width: 100%; }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: 1px;
+  }
+  .badge.reset { background: #4a2f2f; color: #ffb0b0; }
+  .badge.live { background: #24402a; color: #a6e6b0; }
+  .buttons { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+  button {
+    background: #1f2733;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: #2a3442; }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-bottom: 10px; }
+  #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 12.5px; margin-top: 4px; }
+  #stats div.k { color: var(--muted); }
+  #stats div.v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+  #right { flex: 1 1 640px; min-width: 480px; display: flex; flex-direction: column; gap: 16px; }
+  canvas { display: block; width: 100%; background: #0a0d12; border-radius: 6px; }
+  .chart-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .chart-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .chart-row .panel { flex: 1 1 380px; }
+  footer { padding: 10px 20px 24px; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Trophic Co-extinction Cascade Model</h1>
+  <p>
+    Reproduction of the food-chain model from Amaral &amp; Meyer,
+    <em>“Environmental Changes, Co-extinction, and Patterns in the Fossil Record”</em> (1998, arXiv:cond-mat/9804102).
+    Species occupy niches across trophic levels; level 0 is autotrophic, higher levels each feed on up to <em>k</em> random prey
+    in the level below. Each tick: a random fraction <em>p</em> of level-0 species go extinct from environmental change, extinction
+    then cascades upward through broken food links; separately, existing species speciate at rate <em>µ</em> into empty
+    neighboring niches. No competition or fitness is modelled — mass extinctions emerge purely from cascading co-extinction.
+  </p>
+</header>
+<main>
+  <div id="controls" class="panel">
+    <h2>Structural <span class="badge reset">needs reset</span></h2>
+    <div class="row">
+      <label>Trophic levels (L) <span class="val" id="v-L"></span></label>
+      <input type="range" id="L" min="2" max="10" step="1">
+    </div>
+    <div class="row">
+      <label>Niches per level (N) <span class="val" id="v-N"></span></label>
+      <input type="range" id="N" min="20" max="500" step="10">
+    </div>
+    <div class="row">
+      <label>Initial species (N₀) <span class="val" id="v-N0"></span></label>
+      <input type="range" id="N0" min="5" max="200" step="5">
+    </div>
+
+    <h2>Dynamics <span class="badge live">live</span></h2>
+    <div class="row">
+      <label>Speciation rate (µ) <span class="val" id="v-mu"></span></label>
+      <input type="range" id="mu" min="0.001" max="0.2" step="0.001">
+    </div>
+    <div class="row">
+      <label>Extinction fraction (p) <span class="val" id="v-p"></span></label>
+      <input type="range" id="p" min="0.001" max="0.2" step="0.001">
+    </div>
+    <div class="row">
+      <label>Max prey per species (k) <span class="val" id="v-k"></span></label>
+      <input type="range" id="k" min="1" max="8" step="1">
+    </div>
+
+    <h2>Playback <span class="badge live">live</span></h2>
+    <div class="row">
+      <label>Steps per frame <span class="val" id="v-spf"></span></label>
+      <input type="range" id="spf" min="1" max="100" step="1">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="showLinks" checked>
+      <label for="showLinks">Show prey links in lattice view</label>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" id="playBtn">Play</button>
+      <button id="stepBtn">Step</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+
+    <h2>Live stats</h2>
+    <div id="stats">
+      <div class="k">Tick</div><div class="v" id="s-tick">0</div>
+      <div class="k">Species</div><div class="v" id="s-species">0</div>
+      <div class="k">Last extinction size</div><div class="v" id="s-ext">0</div>
+      <div class="k">Last origination size</div><div class="v" id="s-orig">0</div>
+      <div class="k">Fitted τ (power law)</div><div class="v" id="s-tau">–</div>
+      <div class="k">Total extinctions</div><div class="v" id="s-totalext">0</div>
+      <div class="k">Total speciations</div><div class="v" id="s-totalorig">0</div>
+    </div>
+  </div>
+
+  <div id="right">
+    <div class="panel">
+      <div class="chart-title"><span>Lattice — levels (rows, level 0 at bottom) × niches (columns)</span><span id="lattice-caption"></span></div>
+      <canvas id="lattice" height="300"></canvas>
+    </div>
+    <div class="chart-row">
+      <div class="panel">
+        <div class="chart-title"><span>Species count &amp; extinction events over time</span><span>scrolling strip chart</span></div>
+        <canvas id="timeseries" height="260"></canvas>
+      </div>
+      <div class="panel">
+        <div class="chart-title"><span>Extinction size distribution (log–log)</span><span>P(s) ~ s^-τ</span></div>
+        <canvas id="histogram" height="260"></canvas>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>
+  Single self-contained HTML file, no dependencies. All simulation, rendering and power-law fitting run client-side in vanilla JS.
+</footer>
+
+<script>
+"use strict";
+
+// ---------- Model ----------
+
+class Model {
+  constructor(params) {
+    this.params = params; // {L, N, N0, mu, p, k}
+    this.reset();
+  }
+
+  reset() {
+    const { L, N, N0 } = this.params;
+    this.tick = 0;
+    this.nextId = 1;
+    this.species = new Map(); // id -> {level, niche, prey: number[] of species ids}
+    this.levels = [];
+    for (let l = 0; l < L; l++) {
+      this.levels.push({
+        niches: new Array(N).fill(null),
+        occupiedList: [],
+        posInList: new Int32Array(N).fill(-1),
+      });
+    }
+    // seed level 0
+    const n0 = Math.min(N0, N);
+    const chosen = this._sampleDistinctIndices(N, n0);
+    for (const niche of chosen) {
+      this._createSpecies(0, niche, []);
+    }
+    this.speciesCountHistory = [];
+    this.extinctionSizeHistory = [];
+    this.originationSizeHistory = [];
+    this.extinctionSizesAll = [];
+    this.totalExtinctions = 0;
+    this.totalOriginations = 0;
+    this.lastExtinctionSize = 0;
+    this.lastOriginationSize = 0;
+    this._pushHistory(0, 0);
+  }
+
+  _sampleDistinctIndices(n, k) {
+    const pool = Array.from({ length: n }, (_, i) => i);
+    const res = [];
+    for (let i = 0; i < k; i++) {
+      const j = i + Math.floor(Math.random() * (n - i));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+      res.push(pool[i]);
+    }
+    return res;
+  }
+
+  _sampleDistinctFromList(list, k) {
+    if (k >= list.length) return list.slice();
+    const copy = list.slice();
+    const n = copy.length;
+    const res = [];
+    for (let i = 0; i < k; i++) {
+      const j = i + Math.floor(Math.random() * (n - i));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      res.push(copy[i]);
+    }
+    return res;
+  }
+
+  _occupy(level, niche, id) {
+    const lv = this.levels[level];
+    lv.niches[niche] = id;
+    lv.posInList[niche] = lv.occupiedList.length;
+    lv.occupiedList.push(niche);
+  }
+
+  _vacate(level, niche) {
+    const lv = this.levels[level];
+    const pos = lv.posInList[niche];
+    const last = lv.occupiedList.length - 1;
+    const lastNiche = lv.occupiedList[last];
+    lv.occupiedList[pos] = lastNiche;
+    lv.posInList[lastNiche] = pos;
+    lv.occupiedList.pop();
+    lv.posInList[niche] = -1;
+    lv.niches[niche] = null;
+  }
+
+  _createSpecies(level, niche, prey) {
+    const id = this.nextId++;
+    this.species.set(id, { level, niche, prey });
+    this._occupy(level, niche, id);
+    return id;
+  }
+
+  _killSpecies(id) {
+    const s = this.species.get(id);
+    this.species.delete(id);
+    this._vacate(s.level, s.niche);
+  }
+
+  _pushHistory(extSize, origSize) {
+    const cap = 4000;
+    this.speciesCountHistory.push(this.species.size);
+    this.extinctionSizeHistory.push(extSize);
+    this.originationSizeHistory.push(origSize);
+    if (this.speciesCountHistory.length > cap) {
+      this.speciesCountHistory.shift();
+      this.extinctionSizeHistory.shift();
+      this.originationSizeHistory.shift();
+    }
+    if (extSize > 0) {
+      this.extinctionSizesAll.push(extSize);
+      if (this.extinctionSizesAll.length > 40000) {
+        this.extinctionSizesAll.splice(0, this.extinctionSizesAll.length - 20000);
+      }
+    }
+  }
+
+  step() {
+    const extSize = this._extinctionPhase();
+    const origSize = this._originationPhase();
+    this.tick++;
+    this.lastExtinctionSize = extSize;
+    this.lastOriginationSize = origSize;
+    this.totalExtinctions += extSize;
+    this.totalOriginations += origSize;
+    this._pushHistory(extSize, origSize);
+    return { extSize, origSize };
+  }
+
+  _extinctionPhase() {
+    const { p, L } = this.params;
+    let killed = 0;
+
+    // Level 0: random environmental extinction of a fraction p
+    const lv0 = this.levels[0];
+    const count0 = lv0.occupiedList.length;
+    const kKill = Math.round(p * count0);
+    for (let i = 0; i < kKill; i++) {
+      const idx = Math.floor(Math.random() * lv0.occupiedList.length);
+      const niche = lv0.occupiedList[idx];
+      const id = lv0.niches[niche];
+      this._killSpecies(id);
+      killed++;
+    }
+
+    // Cascade upward: level l dies if all its prey are gone
+    for (let l = 1; l < L; l++) {
+      const lv = this.levels[l];
+      const snapshot = lv.occupiedList.slice();
+      const toKill = [];
+      for (const niche of snapshot) {
+        const id = lv.niches[niche];
+        if (id === null) continue; // may already be gone if duplicated in snapshot (not possible, but safe)
+        const s = this.species.get(id);
+        s.prey = s.prey.filter((pid) => this.species.has(pid));
+        if (s.prey.length === 0) toKill.push(id);
+      }
+      for (const id of toKill) this._killSpecies(id);
+      killed += toKill.length;
+    }
+    return killed;
+  }
+
+  _originationPhase() {
+    const { mu, k, L, N } = this.params;
+    const snapshotIds = Array.from(this.species.keys());
+    let created = 0;
+    for (const id of snapshotIds) {
+      if (Math.random() >= mu) continue;
+      const s = this.species.get(id);
+      if (!s) continue; // could have gone extinct earlier this tick
+      const delta = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
+      const targetLevel = s.level + delta;
+      if (targetLevel < 0 || targetLevel >= L) continue;
+      const targetNiche = Math.floor(Math.random() * N);
+      if (this.levels[targetLevel].niches[targetNiche] !== null) continue;
+
+      let prey = [];
+      if (targetLevel > 0) {
+        const below = this.levels[targetLevel - 1];
+        if (below.occupiedList.length === 0) continue;
+        const kk = Math.min(k, below.occupiedList.length);
+        const preyNiches = this._sampleDistinctFromList(below.occupiedList, kk);
+        prey = preyNiches.map((n) => below.niches[n]);
+      }
+      this._createSpecies(targetLevel, targetNiche, prey);
+      created++;
+    }
+    return created;
+  }
+}
+
+// ---------- Power law fit ----------
+
+function fitPowerLaw(sizes) {
+  if (sizes.length < 20) return { tau: null, points: [], fit: null };
+  const maxS = Math.max(...sizes);
+  const nBins = 22;
+  const logMin = 0, logMax = Math.log10(maxS + 1);
+  const edges = [];
+  for (let i = 0; i <= nBins; i++) edges.push(Math.pow(10, logMin + (logMax - logMin) * i / nBins));
+  const counts = new Array(nBins).fill(0);
+  for (const s of sizes) {
+    for (let i = 0; i < nBins; i++) {
+      if (s >= edges[i] && s < edges[i + 1]) { counts[i]++; break; }
+      if (i === nBins - 1 && s >= edges[i + 1] - 1e-9) counts[i]++;
+    }
+  }
+  const total = sizes.length;
+  const points = [];
+  for (let i = 0; i < nBins; i++) {
+    const width = edges[i + 1] - edges[i];
+    if (counts[i] > 0 && width > 0) {
+      const center = Math.sqrt(edges[i] * edges[i + 1]);
+      const density = counts[i] / (total * width);
+      points.push([Math.log10(center), Math.log10(density)]);
+    }
+  }
+  if (points.length < 4) return { tau: null, points, fit: null };
+  // least squares linear fit
+  let n = points.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const [x, y] of points) { sx += x; sy += y; sxx += x * x; sxy += x * y; }
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  const intercept = (sy - slope * sx) / n;
+  return { tau: -slope, points, fit: { slope, intercept } };
+}
+
+// ---------- Rendering ----------
+
+const el = (id) => document.getElementById(id);
+const latticeCanvas = el("lattice");
+const tsCanvas = el("timeseries");
+const histCanvas = el("histogram");
+
+function fitCanvasToCss(c, cssHeight) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = c.clientWidth;
+  c.width = Math.round(cssWidth * dpr);
+  c.height = Math.round(cssHeight * dpr);
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { w: cssWidth, h: cssHeight, ctx };
+}
+
+function drawLattice(model, showLinks) {
+  const { w, h, ctx } = fitCanvasToCss(latticeCanvas, 300);
+  ctx.clearRect(0, 0, w, h);
+  const L = model.params.L, N = model.params.N;
+  const cellW = w / N;
+  const cellH = h / L;
+
+  // links first (under cells)
+  if (showLinks) {
+    ctx.strokeStyle = "rgba(120,150,190,0.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const [id, s] of model.species) {
+      if (s.prey.length === 0) continue;
+      const y1 = h - (s.level + 0.5) * cellH;
+      const x1 = (s.niche + 0.5) * cellW;
+      for (const pid of s.prey) {
+        const p = model.species.get(pid);
+        if (!p) continue;
+        const y2 = h - (p.level + 0.5) * cellH;
+        const x2 = (p.niche + 0.5) * cellW;
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      }
+    }
+    ctx.stroke();
+  }
+
+  // cells
+  for (let l = 0; l < L; l++) {
+    const hue = 210 - (l * 150) / Math.max(1, L - 1);
+    ctx.fillStyle = `hsl(${hue},70%,55%)`;
+    const y = h - (l + 1) * cellH;
+    for (const niche of model.levels[l].occupiedList) {
+      ctx.fillRect(niche * cellW, y, Math.max(1, cellW - (cellW > 3 ? 1 : 0)), cellH - 1);
+    }
+  }
+  el("lattice-caption").textContent = `${model.species.size} species alive`;
+}
+
+function drawTimeseries(model) {
+  const { w, h, ctx } = fitCanvasToCss(tsCanvas, 260);
+  ctx.clearRect(0, 0, w, h);
+  const N = model.speciesCountHistory.length;
+  if (N < 2) return;
+  const window_ = Math.min(N, 800);
+  const start = N - window_;
+  const speciesSlice = model.speciesCountHistory.slice(start);
+  const extSlice = model.extinctionSizeHistory.slice(start);
+
+  const topH = h * 0.62, botH = h * 0.34, gap = h * 0.04;
+  const maxSpecies = Math.max(1, ...speciesSlice);
+  const maxExt = Math.max(1, ...extSlice);
+
+  // species count line
+  ctx.strokeStyle = "#4fa3ff";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  speciesSlice.forEach((v, i) => {
+    const x = (i / (window_ - 1)) * w;
+    const y = topH - (v / maxSpecies) * topH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = "#8a95a3";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`species (max ${maxSpecies})`, 4, 12);
+
+  // extinction spikes
+  const baseY = topH + gap + botH;
+  ctx.strokeStyle = "#ff6b6b";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  extSlice.forEach((v, i) => {
+    const x = (i / (window_ - 1)) * w;
+    const y = baseY - (v / maxExt) * botH;
+    ctx.moveTo(x, baseY);
+    ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = "#8a95a3";
+  ctx.fillText(`extinction size (max ${maxExt})`, 4, topH + gap + 10);
+}
+
+function drawHistogram(model) {
+  const { w, h, ctx } = fitCanvasToCss(histCanvas, 260);
+  ctx.clearRect(0, 0, w, h);
+  const { tau, points, fit } = fitPowerLaw(model.extinctionSizesAll);
+  const pad = { l: 34, r: 10, t: 10, b: 26 };
+  const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+
+  if (points.length < 4) {
+    ctx.fillStyle = "#8a95a3";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("collecting data...", pad.l, h / 2);
+    return;
+  }
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const sx = (x) => pad.l + ((x - xMin) / (xMax - xMin || 1)) * plotW;
+  const sy = (y) => pad.t + plotH - ((y - yMin) / (yMax - yMin || 1)) * plotH;
+
+  // axes
+  ctx.strokeStyle = "#2a313c";
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + plotH); ctx.lineTo(pad.l + plotW, pad.t + plotH);
+  ctx.stroke();
+  ctx.fillStyle = "#8a95a3";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("log10(size)", pad.l + plotW - 55, pad.t + plotH + 18);
+  ctx.save();
+  ctx.translate(10, pad.t + plotH / 2 + 20);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("log10(density)", 0, 0);
+  ctx.restore();
+
+  // points
+  ctx.fillStyle = "#4fa3ff";
+  for (const [x, y] of points) {
+    ctx.beginPath();
+    ctx.arc(sx(x), sy(y), 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // fit line
+  if (fit) {
+    ctx.strokeStyle = "#ff6b6b";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx(xMin), sy(fit.slope * xMin + fit.intercept));
+    ctx.lineTo(sx(xMax), sy(fit.slope * xMax + fit.intercept));
+    ctx.stroke();
+  }
+
+  el("s-tau").textContent = tau ? `${tau.toFixed(2)} (paper: 1.97)` : "–";
+}
+
+// ---------- Wiring ----------
+
+const defaults = { L: 6, N: 150, N0: 30, mu: 0.02, p: 0.01, k: 3, spf: 5 };
+const sliderIds = ["L", "N", "N0", "mu", "p", "k", "spf"];
+for (const id of sliderIds) el(id).value = defaults[id];
+
+function readParams() {
+  return {
+    L: +el("L").value,
+    N: +el("N").value,
+    N0: +el("N0").value,
+    mu: +el("mu").value,
+    p: +el("p").value,
+    k: +el("k").value,
+  };
+}
+
+function updateLabels() {
+  el("v-L").textContent = el("L").value;
+  el("v-N").textContent = el("N").value;
+  el("v-N0").textContent = el("N0").value;
+  el("v-mu").textContent = (+el("mu").value).toFixed(3);
+  el("v-p").textContent = (+el("p").value).toFixed(3);
+  el("v-k").textContent = el("k").value;
+  el("v-spf").textContent = el("spf").value;
+}
+updateLabels();
+
+let model = new Model(readParams());
+let running = false;
+
+function applyLiveParams() {
+  model.params.mu = +el("mu").value;
+  model.params.p = +el("p").value;
+  model.params.k = +el("k").value;
+}
+
+for (const id of ["mu", "p", "k", "spf"]) {
+  el(id).addEventListener("input", () => { updateLabels(); applyLiveParams(); });
+}
+for (const id of ["L", "N", "N0"]) {
+  el(id).addEventListener("input", updateLabels);
+}
+
+el("resetBtn").addEventListener("click", () => {
+  model = new Model(readParams());
+  render();
+});
+
+el("stepBtn").addEventListener("click", () => {
+  model.step();
+  render();
+});
+
+el("playBtn").addEventListener("click", () => {
+  running = !running;
+  el("playBtn").textContent = running ? "Pause" : "Play";
+});
+
+function render() {
+  const showLinks = el("showLinks").checked;
+  drawLattice(model, showLinks);
+  drawTimeseries(model);
+  drawHistogram(model);
+  el("s-tick").textContent = model.tick;
+  el("s-species").textContent = model.species.size;
+  el("s-ext").textContent = model.lastExtinctionSize;
+  el("s-orig").textContent = model.lastOriginationSize;
+  el("s-totalext").textContent = model.totalExtinctions;
+  el("s-totalorig").textContent = model.totalOriginations;
+}
+
+function loop() {
+  if (running) {
+    const spf = +el("spf").value;
+    for (let i = 0; i < spf; i++) model.step();
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+window.addEventListener("resize", render);
+</script>
+</body>
+</html>
